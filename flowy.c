@@ -55,14 +55,6 @@
    };
  */
 
-/*
-   enum field_type {
-   U_INT8  = 0;
-   U_INT16 = 1;
-   U_INT32 = 2;
-   U_INT64 = 3;
-   };*/
-
 enum field_length {
     LEN_UNIX_SECS       = 32,
     LEN_UNIX_NSECS      = 32,
@@ -134,13 +126,13 @@ bool gfilter_rel_equal(char **records, int record1, unsigned short field_offset1
     unsigned int val1;
     unsigned int val2;
 
-    if (length1 == 8) {
+/*    if (length1 == 8) {
         val1 = *(unsigned char *)(records[record1] + field_offset1);
     } else if (length1 == 16) {
         val1 = *(unsigned short *)(records[record1] + field_offset1);
-    } else if (length1 == 32) {
+    } else if (length1 == 32) {*/
         val1 = *(unsigned int *)(records[record1] + field_offset1);
-    } else {
+/*    } else {
         return false;
     }
 
@@ -148,17 +140,17 @@ bool gfilter_rel_equal(char **records, int record1, unsigned short field_offset1
         val2 = *(unsigned char *)(records[record2] + field_offset2);
     } else if (length2 == 16) {
         val2 = *(unsigned short *)(records[record2] + field_offset2);
-    } else if (length2 == 32) {
+    } else if (length2 == 32) {*/
         val2 = *(unsigned int *)(records[record2] + field_offset2);
-    } else {
+/*    } else {
         return false;
     }
 
-    if (delta == 0) {
+    if (delta == 0) {*/
         return val1 == val2;
-    } else {
+/*    } else {
         return abs(val1 - val2) <= delta;
-    }
+    }*/
 }
 
 bool gfilter_rel_lessthan(char **records, int record1, unsigned short field_offset1, enum field_length length1,
@@ -168,13 +160,13 @@ bool gfilter_rel_lessthan(char **records, int record1, unsigned short field_offs
     unsigned int val1;
     unsigned int val2;
 
-    if (length1 == 8) {
+/*    if (length1 == 8) {
         val1 = *(unsigned char *)(records[record1] + field_offset1);
     } else if (length1 == 16) {
         val1 = *(unsigned short *)(records[record1] + field_offset1);
-    } else if (length1 == 32) {
+    } else if (length1 == 32) {*/
         val1 = *(unsigned int *)(records[record1] + field_offset1);
-    } else {
+/*    } else {
         return false;
     }
 
@@ -182,17 +174,13 @@ bool gfilter_rel_lessthan(char **records, int record1, unsigned short field_offs
         val2 = *(unsigned char *)(records[record2] + field_offset2);
     } else if (length2 == 16) {
         val2 = *(unsigned short *)(records[record2] + field_offset2);
-    } else if (length2 == 32) {
+    } else if (length2 == 32) {*/
         val2 = *(unsigned int *)(records[record2] + field_offset2);
-    } else {
+/*    } else {
         return false;
-    }
+    }*/
 
-    if (delta == 0) {
-        return val1 < val2;
-    } else {
-        return val2 - val1 >= 0 && val2 - val1 <= delta;
-    }
+    return val1 < val2 + delta;
 }
 
 unsigned int aggr_static(char **records, int *group_records, int num_records, unsigned short field_offset, enum field_length length)
@@ -367,16 +355,13 @@ int *filter(struct ft_data *data, struct absolute_filter_rule *rules)
     int i, j;
     int *filtered_records;
     int num_filtered_records;
-    int buffer_size;
 
-    buffer_size = 128; //TODO: make this configureable
-    filtered_records = (int *)malloc(sizeof(int)*buffer_size);
+    num_filtered_records = 0;
+    filtered_records = (int *)malloc(num_filtered_records);
     if (filtered_records == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
-
-    num_filtered_records = 0;
 
     for (i = 0; i < data->num_records; i++) {
         for (j = 0; rules[j].filter != NULL; j++) {
@@ -388,19 +373,13 @@ int *filter(struct ft_data *data, struct absolute_filter_rule *rules)
         if (rules[j].filter != NULL)
             continue;
 
-        // if we are here, then this record matched all rules
-
-        if (num_filtered_records == buffer_size) {
-            buffer_size *= 2;
-            filtered_records = (int *)realloc(filtered_records, sizeof(int)*buffer_size);
-            if (filtered_records == NULL) {
-                perror("malloc");
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        filtered_records[num_filtered_records] = i;
         num_filtered_records++;
+        filtered_records = (int *)realloc(filtered_records, sizeof(int)*num_filtered_records);
+        if (filtered_records == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        filtered_records[num_filtered_records-1] = i;
     }
 
     filtered_records = (int *)realloc(filtered_records, sizeof(int)*(num_filtered_records+1));
@@ -418,31 +397,37 @@ int *filter(struct ft_data *data, struct absolute_filter_rule *rules)
 struct group **grouper(struct ft_data *data, int *filtered_records, struct relative_group_filter_rule *group_module_filters, struct grouper_aggr *aggr, int num_group_aggr)
 {
     struct group **groups;
-    int group_buffer_size;
     int num_groups;
     int i, j, k;
-    int *temp_group_member_buffer;
-    int temp_group_member_buffer_size;
     int num_group_members;
 
-    temp_group_member_buffer_size = 128;
-    temp_group_member_buffer = (int *)malloc(sizeof(int)*temp_group_member_buffer_size);
-
-    group_buffer_size = 128;
-    groups = (struct group **)malloc(sizeof(struct group *)*group_buffer_size);
-
-    num_groups = 0;
+    num_groups = 1;
+    groups = (struct group **)malloc(sizeof(struct group *));
 
     for (i = 0; filtered_records[i] != -1; i++) {
-        if (i%10000==0)
-            printf("%d\n", i);
+        if (i%10000==0) {
+            printf("%d ", i);
+            /*
+            printf("\r");
+            for (j=0; j<(i*w.ws_col/100); j++) printf("=");
+            */
+            fflush(stdout);
+        }
 
         if (filtered_records[i] == -2)
             continue;
 
-        num_group_members = 0;
+        groups = (struct group **)realloc(groups, sizeof(struct group*)*num_groups);
+        groups[num_groups-1] = (struct group *)malloc(sizeof(struct group));
+        if (groups[num_groups-1] == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        num_group_members = 1;
+        groups[num_groups-1]->members = (int *)malloc(sizeof(int));
+        groups[num_groups-1]->members[0] = filtered_records[i];
 
-        for (j = 0; filtered_records[j] != -1; j++) {
+        for (j = i+1; filtered_records[j] != -1; j++) {
             if (i == j) // dont try to group with itself
                 continue;
 
@@ -459,74 +444,39 @@ struct group **grouper(struct ft_data *data, int *filtered_records, struct relat
             if (group_module_filters[k].filter != NULL)
                 continue;
 
-            if (num_group_members == temp_group_member_buffer_size) {
-                temp_group_member_buffer_size *= 2;
-                temp_group_member_buffer = (int *)realloc(temp_group_member_buffer, sizeof(int)*temp_group_member_buffer_size);
-                if (temp_group_member_buffer == NULL) {
-                    perror("malloc");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            temp_group_member_buffer[num_group_members] = filtered_records[j];
-            filtered_records[j] = -2;
             num_group_members++;
+            groups[num_groups-1]->members = (int *)realloc(groups[num_groups-1]->members, sizeof(int)*num_group_members);
+            groups[num_groups-1]->members[num_group_members-1] = filtered_records[j];
+            filtered_records[j] = -2;
         }
 
-        if (num_group_members == 0)
-            continue;
-
-        if (num_groups == group_buffer_size) {
-            group_buffer_size *= 2;
-            groups = (struct group **)realloc(groups, sizeof(struct group *)*group_buffer_size);
-            if (groups == NULL) {
-                perror("malloc");
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        groups[num_groups] = (struct group *)malloc(sizeof(struct group));
-        if (groups[num_groups] == NULL) {
-            perror("malloc");
-            exit(EXIT_FAILURE);
-        }
-        groups[num_groups]->num_members = num_group_members + 1;
-        groups[num_groups]->members = (int *)malloc(sizeof(int)*(num_group_members + 1));
-        if (groups[num_groups]->members == NULL) {
-            perror("malloc");
-            exit(EXIT_FAILURE);
-        }
-        memcpy(groups[num_groups]->members, temp_group_member_buffer, sizeof(int)*num_group_members);
-        groups[num_groups]->members[num_group_members] = filtered_records[i];
-
-        groups[num_groups]->aggr = (int *)malloc(sizeof(int)*num_group_aggr);
-        if (groups[num_groups]->aggr == NULL) {
+        groups[num_groups-1]->aggr = (int *)malloc(sizeof(int)*num_group_aggr);
+        if (groups[num_groups-1]->aggr == NULL) {
             perror("malloc");
             exit(EXIT_FAILURE);
         }
 
         for (j = 0; j < num_group_aggr; j++) {
-            groups[num_groups]->aggr[j] = aggr[j].aggregate(data->records, groups[num_groups]->members, num_group_members+1, aggr[j].field_offset, aggr[j].length);
+            groups[num_groups-1]->aggr[j] = aggr[j].aggregate(data->records, groups[num_groups-1]->members, num_group_members, aggr[j].field_offset, aggr[j].length);
         }
 
         num_groups++;
     }
 
-    groups = (struct group **)realloc(groups, sizeof(struct group *)*(num_groups + 1));
+    // add terminating group
+    groups = (struct group **)realloc(groups, sizeof(struct group *)*(num_groups));
     if (groups == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
-    groups[num_groups] = (struct group *)malloc(sizeof(struct group));
-    if (groups[num_groups] == NULL) {
+    groups[num_groups-1] = (struct group *)malloc(sizeof(struct group));
+    if (groups[num_groups-1] == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
-    groups[num_groups]->num_members = 0;
-    groups[num_groups]->members = NULL;
-    groups[num_groups]->aggr = NULL;
-
-    free(temp_group_member_buffer);
+    groups[num_groups-1]->num_members = 0;
+    groups[num_groups-1]->members = NULL;
+    groups[num_groups-1]->aggr = NULL;
 
     printf("number of groups: %d\n", num_groups);
 
@@ -538,16 +488,9 @@ struct group **group_filter(struct group **groups, struct absolute_group_filter_
     int i, j;
     struct group **filtered_groups;
     int num_filtered_groups;
-    int buffer_size;
-
-    buffer_size = 128;
-    filtered_groups = (struct group **)malloc(sizeof(struct group *)*buffer_size);
-    if (filtered_groups == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
 
     num_filtered_groups = 0;
+    filtered_groups = (struct group **)malloc(sizeof(struct group *)*num_filtered_groups);
 
     for (i = 0; groups[i]->aggr != NULL; i++) {
         for (j = 0; rules[j].filter != NULL; j++) {
@@ -563,17 +506,9 @@ struct group **group_filter(struct group **groups, struct absolute_group_filter_
             continue;
         }
 
-        if (num_filtered_groups == buffer_size) {
-            buffer_size *= 2;
-            filtered_groups = (struct group **)realloc(filtered_groups, sizeof(struct group *)*buffer_size);
-            if (filtered_groups == NULL) {
-                perror("malloc");
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        filtered_groups[num_filtered_groups] = groups[i];
         num_filtered_groups++;
+        filtered_groups = (struct group **)realloc(filtered_groups, sizeof(struct group *)*num_filtered_groups);
+        filtered_groups[num_filtered_groups-1] = groups[i];
     }
 
     filtered_groups = (struct group **)realloc(filtered_groups, sizeof(struct group *)*(num_filtered_groups+1));
@@ -696,14 +631,14 @@ int main(int argc, char **argv)
      */
 
     struct absolute_filter_rule filter_rules_branch1[2] = {
-//        { data->offsets.dstport, LEN_DSTPORT, 80, 0, filter_equal },
+        { data->offsets.dstport, LEN_DSTPORT, 80, 0, filter_equal },
         {0,0,0,0,NULL}
     };
 
     struct relative_group_filter_rule group_module_branch1[4] = {
         { data->offsets.srcaddr, LEN_SRCADDR, data->offsets.srcaddr, LEN_SRCADDR, 0, gfilter_rel_equal },
         { data->offsets.dstaddr, LEN_DSTADDR, data->offsets.dstaddr, LEN_DSTADDR, 0, gfilter_rel_equal },
-//        { data->offsets.Last, LEN_LAST, data->offsets.First, LEN_FIRST, 1, gfilter_rel_lessthan },
+        { data->offsets.Last, LEN_LAST, data->offsets.First, LEN_FIRST, 1, gfilter_rel_lessthan },
         { 0, 0, 0, 0, 0, NULL }
     };
 
@@ -729,14 +664,14 @@ int main(int argc, char **argv)
     binfos[0].gfilter_rules = gfilter_branch1;
 
     struct absolute_filter_rule filter_rules_branch2[2] = {
-//        { data->offsets.srcport, LEN_SRCPORT, 80, 0, filter_equal },
+        { data->offsets.srcport, LEN_SRCPORT, 80, 0, filter_equal },
         {0,0,0,0,NULL},
     };
 
     struct relative_group_filter_rule group_module_branch2[4] = {
         { data->offsets.srcaddr, LEN_SRCADDR, data->offsets.srcaddr, LEN_SRCADDR, 0, gfilter_rel_equal },
         { data->offsets.dstaddr, LEN_DSTADDR, data->offsets.dstaddr, LEN_DSTADDR, 0, gfilter_rel_equal },
-//        { data->offsets.Last, LEN_LAST, data->offsets.First, LEN_FIRST, 1, gfilter_rel_lessthan },
+        { data->offsets.Last, LEN_LAST, data->offsets.First, LEN_FIRST, 1, gfilter_rel_lessthan },
         { 0, 0, 0, 0, 0, NULL }
     };
 
@@ -816,6 +751,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
     }
+
+    exit(EXIT_SUCCESS);
 
     free(thread_ids);
     free(thread_attrs);
