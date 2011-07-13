@@ -68,11 +68,7 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
 
     for (i = 0; i < num_filtered_records; i++) {
         if (i%10000==0) {
-            printf("%d ", i);
-            /*
-            printf("\r");
-            for (j=0; j<(i*w.ws_col/100); j++) printf("=");
-            */
+            printf("\r%zd%%", (i*100)/num_filtered_records);
             fflush(stdout);
         }
 
@@ -235,7 +231,7 @@ static void *branch_start(void *arg)
      */
 
     filtered_records = filter(binfo->data, binfo->filter_rules, binfo->num_filter_rules, &num_filtered_records);
-    printf("number of filtered records: %zd\n", num_filtered_records);
+    printf("\rnumber of filtered records: %zd\n", num_filtered_records);
 
     /*
      * GROUPER
@@ -243,7 +239,7 @@ static void *branch_start(void *arg)
 
     groups = grouper(filtered_records, num_filtered_records, binfo->group_modules, binfo->num_group_modules, binfo->aggr, binfo->num_aggr, &num_groups);
     free(filtered_records);
-    printf("number of groups: %zd\n", num_groups);
+    printf("\rnumber of groups: %zd\n", num_groups);
 
     /*
      * GROUPFILTER
@@ -251,7 +247,7 @@ static void *branch_start(void *arg)
 
     filtered_groups = group_filter(groups, num_groups, binfo->gfilter_rules, binfo->num_gfilter_rules, &num_filtered_groups);
     free(groups);
-    printf("number of filtered groups: %zd\n", num_filtered_groups);
+    printf("\rnumber of filtered groups: %zd\n", num_filtered_groups);
 
     pthread_exit(filtered_groups);
 }
