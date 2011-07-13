@@ -54,23 +54,16 @@ char **filter(struct ft_data *data, struct filter_rule *filter_rules, int num_fi
         filtered_records[*num_filtered_records-1] = data->records[i];
     }
 
-    filtered_records = (char **)realloc(filtered_records, sizeof(char *)*(*num_filtered_records+1));
-    if (filtered_records == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    filtered_records[*num_filtered_records] = NULL;
-
     return filtered_records;
 }
 
 struct group **grouper(char **filtered_records, size_t num_filtered_records, struct grouper_rule *group_modules, int num_group_modules, struct grouper_aggr *aggr, size_t num_group_aggr, size_t *num_groups)
 {
     struct group **groups;
+    struct group *newgroup;
     int i, j, k;
-    int num_group_members;
 
-    *num_groups = 1;
+    *num_groups = 0;
     groups = (struct group **)malloc(sizeof(struct group *));
 
     for (i = 0; i < num_filtered_records; i++) {
@@ -86,15 +79,17 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
         if (filtered_records[i] == NULL)
             continue;
 
+        (*num_groups)++;
         groups = (struct group **)realloc(groups, sizeof(struct group*)**num_groups);
-        groups[*num_groups-1] = (struct group *)malloc(sizeof(struct group));
-        if (groups[*num_groups-1] == NULL) {
+        newgroup = (struct group *)malloc(sizeof(struct group));
+        if (newgroup == NULL) {
             perror("malloc");
             exit(EXIT_FAILURE);
         }
-        num_group_members = 1;
-        groups[*num_groups-1]->members = (char **)malloc(sizeof(char *));
-        groups[*num_groups-1]->members[0] = filtered_records[i];
+        groups[*num_groups-1] = newgroup;
+        newgroup->num_members = 1;
+        newgroup->members = (char **)malloc(sizeof(char *));
+        newgroup->members[0] = filtered_records[i];
 
         for (j = i+1; j < num_filtered_records; j++) {
             if (i == j) // dont try to group with itself
@@ -105,7 +100,7 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
 
             // check all module filter rules for those two records
             for (k = 0; k < num_group_modules; k++) {
-                if (!group_modules[k].func(groups[*num_groups-1], group_modules[k].field_offset1,
+                if (!group_modules[k].func(newgroup, group_modules[k].field_offset1,
                             filtered_records[j], group_modules[k].field_offset2, group_modules[k].delta))
                     break;
             }
@@ -113,44 +108,29 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
             if (k < num_group_modules)
                 continue;
 
-            num_group_members++;
-            groups[*num_groups-1]->members = (char **)realloc(groups[*num_groups-1]->members, sizeof(char *)*num_group_members);
-            groups[*num_groups-1]->members[num_group_members-1] = filtered_records[j];
+            newgroup->num_members++;
+            newgroup->members = (char **)realloc(newgroup->members, sizeof(char *)*newgroup->num_members);
+            newgroup->members[newgroup->num_members-1] = filtered_records[j];
             filtered_records[j] = NULL;
         }
+    }
 
-        groups[*num_groups-1]->aggr = (struct aggr *)malloc(sizeof(struct aggr)*num_group_aggr);
-        if (groups[*num_groups-1]->aggr == NULL) {
+    for (i = 0; i < *num_groups; i++) {
+        groups[i]->aggr = (struct aggr *)malloc(sizeof(struct aggr)*num_group_aggr);
+        if (groups[i]->aggr == NULL) {
             perror("malloc");
             exit(EXIT_FAILURE);
         }
 
         for (j = 0; j < num_group_aggr; j++) {
-            groups[*num_groups-1]->aggr[j] = aggr[j].func(groups[*num_groups-1]->members, num_group_members, aggr[j].field_offset);
+            groups[i]->aggr[j] = aggr[j].func(groups[i]->members, groups[i]->num_members, aggr[j].field_offset);
         }
-
-        (*num_groups)++;
     }
-
-    // add terminating group
-    groups = (struct group **)realloc(groups, sizeof(struct group *)**num_groups);
-    if (groups == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    groups[*num_groups-1] = (struct group *)malloc(sizeof(struct group));
-    if (groups[*num_groups-1] == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    groups[*num_groups-1]->num_members = 0;
-    groups[*num_groups-1]->members = NULL;
-    groups[*num_groups-1]->aggr = NULL;
 
     return groups;
 }
 
-struct group **group_filter(struct group **groups, size_t num_groups, struct gfilter_rule *rules, size_t num_gfilter_rules, size_t num_aggr, size_t *num_filtered_groups)
+struct group **group_filter(struct group **groups, size_t num_groups, struct gfilter_rule *rules, size_t num_gfilter_rules, size_t *num_filtered_groups)
 {
     int i, j;
     struct group **filtered_groups;
@@ -158,7 +138,7 @@ struct group **group_filter(struct group **groups, size_t num_groups, struct gfi
     *num_filtered_groups = 0;
     filtered_groups = (struct group **)malloc(sizeof(struct group *)**num_filtered_groups);
 
-    for (i = 0; i < num_aggr; i++) {
+    for (i = 0; i < num_groups; i++) {
         for (j = 0; j < num_gfilter_rules; j++) {
             if (!rules[j].func(groups[i], rules[j].field, rules[j].value, rules[j].delta))
                 break;
@@ -269,7 +249,7 @@ static void *branch_start(void *arg)
      * GROUPFILTER
      */
 
-    filtered_groups = group_filter(groups, num_groups, binfo->gfilter_rules, binfo->num_gfilter_rules, binfo->num_aggr, &num_filtered_groups);
+    filtered_groups = group_filter(groups, num_groups, binfo->gfilter_rules, binfo->num_gfilter_rules, &num_filtered_groups);
     free(groups);
     printf("number of filtered groups: %zd\n", num_filtered_groups);
 
