@@ -141,8 +141,8 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
     }
 
     for (i = 0; i < num_filtered_records; i++) {
-        if (i%10000==0) {
-            printf("\r%zd%%", (i*100)/num_filtered_records);
+        if ((i&1023)==0) {
+            printf("\r%0.2f%% %d/%zd groups: %zd", (i*100.0f)/num_filtered_records, i, num_filtered_records, *num_groups);
             fflush(stdout);
         }
 
@@ -166,26 +166,22 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
 
         // search for left hand side of comparison in records ordered by right
         // hand side of comparison
-//        printf("blub %u\n", *(uint32_t *)(filtered_records[i] + group_modules[0].field_offset2));
-        struct tree_item_uint32_t *foo = (struct tree_item_uint32_t *)bsearch_r(
+        char ***record_iter = ((struct tree_item_uint32_t *)bsearch_r(
                 filtered_records[i],
                 (void *)uniq_records,
                 num_uniq_records,
                 sizeof(struct tree_item_uint32_t),
                 comp_uint32_t_p,
-                (void *)&group_modules[0].field_offset1);
-        char ***record_iter = foo->ptr;
-//        printf("1: %p\n", **record_iter);
-//        printf("foobar %u\n", *(uint32_t *)(**record_iter + group_modules[0].field_offset2));
+                (void *)&group_modules[0].field_offset1))->ptr;
 
-        for (;;record_iter++) {
-            if (*record_iter == NULL) // check for terminating NULL in sorted_records
-                break;
-
-            if (**record_iter == NULL) // already processed record from filtered_records
+        // iterate until terminating NULL in sorted_records
+        for (;*record_iter != NULL; record_iter++) {
+            // already processed record from filtered_records
+            if (**record_iter == NULL)
                 continue;
 
-            if (**record_iter == filtered_records[i]) // do not group with itself
+            // do not group with itself
+            if (**record_iter == filtered_records[i])
                 continue;
 
             // check all module filter rules for those two records
@@ -195,9 +191,11 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
                     break;
             }
 
-            if (k == 0) // first rule didnt match
+            // first rule didnt match
+            if (k == 0)
                 break;
 
+            // one of the other rules didnt match
             if (k < num_group_modules)
                 continue;
 
@@ -338,7 +336,7 @@ static void *branch_start(void *arg)
 
     groups = grouper(filtered_records, num_filtered_records, binfo->group_modules, binfo->num_group_modules, binfo->aggr, binfo->num_aggr, &num_groups);
     free(filtered_records);
-    printf("\rnumber of groups: %zd\n", num_groups);
+    printf("\nnumber of groups: %zd\n", num_groups);
 
     /*
      * GROUPFILTER
@@ -434,7 +432,7 @@ int main(int argc, char **argv)
     binfos[1].aggr = group_aggr_branch2;
     binfos[1].num_aggr = 4;
     binfos[1].gfilter_rules = gfilter_branch2;
-    binfos[0].num_gfilter_rules = 0;
+    binfos[1].num_gfilter_rules = 0;
 
     /*
      * SPLITTER
