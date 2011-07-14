@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -57,14 +59,86 @@ char **filter(struct ft_data *data, struct filter_rule *filter_rules, int num_fi
     return filtered_records;
 }
 
+struct tree_item_uint32_t {
+    uint32_t value;
+    char ***ptr;
+};
+
+#define comp(size) \
+int comp_##size(const void *e1, const void *e2, void *thunk) \
+{ \
+    size x, y; \
+    x = *(size *)(**(char ***)e1+*(size_t *)thunk); \
+    y = *(size *)(**(char ***)e2+*(size_t *)thunk); \
+    return (x > y) - (y > x); \
+}
+
+comp(uint8_t);
+comp(uint16_t);
+comp(uint32_t);
+comp(uint64_t);
+
+#define comp_p(size) \
+int comp_##size##_p(const void *e1, const void *e2, void *thunk) \
+{ \
+    size x, y; \
+    x = *(size *)((char *)e1+*(size_t *)thunk); \
+    y = ((struct tree_item_uint32_t *)e2)->value; \
+    return (x > y) - (y > x); \
+}
+
+comp_p(uint8_t);
+comp_p(uint16_t);
+comp_p(uint32_t);
+//comp_p(uint64_t);
+
 struct group **grouper(char **filtered_records, size_t num_filtered_records, struct grouper_rule *group_modules, int num_group_modules, struct grouper_aggr *aggr, size_t num_group_aggr, size_t *num_groups)
 {
     struct group **groups;
     struct group *newgroup;
     int i, j, k;
+    char ***sorted_records;
+    struct tree_item_uint32_t *uniq_records;
+    size_t num_uniq_records;
 
     *num_groups = 0;
     groups = (struct group **)malloc(sizeof(struct group *));
+
+    sorted_records = NULL;
+    uniq_records = NULL;
+    num_uniq_records = 0;
+    if (num_group_modules > 0) {
+        sorted_records = (char ***)malloc(sizeof(char **)*(num_filtered_records+1));
+        if (sorted_records == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+
+        for (i = 0; i < num_filtered_records; i++) {
+            sorted_records[i] = &filtered_records[i];
+        }
+
+        // order by right hand side of comparison
+        // TODO: different comp func sizes
+        qsort_r(sorted_records, num_filtered_records, sizeof(char **), comp_uint32_t, (void *)&group_modules[0].field_offset2);
+
+        uniq_records = (struct tree_item_uint32_t *)malloc(num_filtered_records*sizeof(struct tree_item_uint32_t));
+        uniq_records[0].value = *(uint32_t *)(*sorted_records[0] + group_modules[0].field_offset2);
+        uniq_records[0].ptr = &sorted_records[0];
+        num_uniq_records = 1;
+        for (i = 0; i < num_filtered_records; i++) {
+            if (*(uint32_t *)(*sorted_records[i] + group_modules[0].field_offset2)
+            != uniq_records[num_uniq_records-1].value) {
+                uniq_records[num_uniq_records].value = *(uint32_t *)(*sorted_records[i] + group_modules[0].field_offset2);
+                uniq_records[num_uniq_records].ptr = &sorted_records[i];
+                num_uniq_records++;
+            }
+        }
+        uniq_records = (struct tree_item_uint32_t *)realloc(uniq_records, num_uniq_records*sizeof(struct tree_item_uint32_t));
+
+        // mark the end of sorted records
+        sorted_records[num_filtered_records] = NULL;
+    }
 
     for (i = 0; i < num_filtered_records; i++) {
         if (i%10000==0) {
@@ -87,28 +161,53 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
         newgroup->members = (char **)malloc(sizeof(char *));
         newgroup->members[0] = filtered_records[i];
 
-        for (j = i+1; j < num_filtered_records; j++) {
-            if (i == j) // dont try to group with itself
+        if (num_group_modules == 0)
+            continue;
+
+        // search for left hand side of comparison in records ordered by right
+        // hand side of comparison
+//        printf("blub %u\n", *(uint32_t *)(filtered_records[i] + group_modules[0].field_offset2));
+        struct tree_item_uint32_t *foo = (struct tree_item_uint32_t *)bsearch_r(
+                filtered_records[i],
+                (void *)uniq_records,
+                num_uniq_records,
+                sizeof(struct tree_item_uint32_t),
+                comp_uint32_t_p,
+                (void *)&group_modules[0].field_offset1);
+        char ***record_iter = foo->ptr;
+//        printf("1: %p\n", **record_iter);
+//        printf("foobar %u\n", *(uint32_t *)(**record_iter + group_modules[0].field_offset2));
+
+        for (;;record_iter++) {
+            if (*record_iter == NULL) // check for terminating NULL in sorted_records
+                break;
+
+            if (**record_iter == NULL) // already processed record from filtered_records
                 continue;
 
-            if (filtered_records[j] == NULL)
+            if (**record_iter == filtered_records[i]) // do not group with itself
                 continue;
 
             // check all module filter rules for those two records
             for (k = 0; k < num_group_modules; k++) {
                 if (!group_modules[k].func(newgroup, group_modules[k].field_offset1,
-                            filtered_records[j], group_modules[k].field_offset2, group_modules[k].delta))
+                            **record_iter, group_modules[k].field_offset2, group_modules[k].delta))
                     break;
             }
+
+            if (k == 0) // first rule didnt match
+                break;
 
             if (k < num_group_modules)
                 continue;
 
             newgroup->num_members++;
             newgroup->members = (char **)realloc(newgroup->members, sizeof(char *)*newgroup->num_members);
-            newgroup->members[newgroup->num_members-1] = filtered_records[j];
-            filtered_records[j] = NULL;
+            newgroup->members[newgroup->num_members-1] = **record_iter; // assign entry in filtered_records to group
+            **record_iter = NULL; // set entry in filtered_records to NULL
         }
+
+        filtered_records[i] = NULL;
     }
 
     for (i = 0; i < *num_groups; i++) {
@@ -299,7 +398,7 @@ int main(int argc, char **argv)
 
     binfos[0].data = data;
     binfos[0].filter_rules = filter_rules_branch1;
-    binfos[0].num_filter_rules = 1;
+    binfos[0].num_filter_rules = 0;
     binfos[0].group_modules = group_module_branch1;
     binfos[0].num_group_modules = 2;
     binfos[0].aggr = group_aggr_branch1;
@@ -361,6 +460,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    num_threads = 1;
     for (i = 0; i < num_threads; i++) {
         ret = pthread_attr_init(&thread_attrs[i]);
         if (ret != 0) {
