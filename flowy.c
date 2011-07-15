@@ -100,6 +100,7 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
     char ***sorted_records;
     struct tree_item_uint32_t *uniq_records;
     size_t num_uniq_records;
+//    bool rule_matches;
 
     *num_groups = 0;
     groups = (struct group **)malloc(sizeof(struct group *));
@@ -140,7 +141,8 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
         sorted_records[num_filtered_records] = NULL;
     }
 
-    for (i = 0; i < num_filtered_records; i++) {
+    for (i = 0; i < 10000; i++) {
+//    for (i = 0; i < num_filtered_records; i++) {
         if ((i&1023)==0) {
             printf("\r%0.2f%% %d/%zd groups: %zd", (i*100.0f)/num_filtered_records, i, num_filtered_records, *num_groups);
             fflush(stdout);
@@ -184,12 +186,193 @@ struct group **grouper(char **filtered_records, size_t num_filtered_records, str
             if (**record_iter == filtered_records[i])
                 continue;
 
+            /*
+            if (*(uint32_t *)(filtered_records[i]+group_modules[0].field_offset1) != *(uint32_t *)(**record_iter+group_modules[0].field_offset2))
+                    break;
+*/
             // check all module filter rules for those two records
             for (k = 0; k < num_group_modules; k++) {
-                if (!group_modules[k].func(newgroup, group_modules[k].field_offset1,
+                switch (group_modules[k].op) {
+                    case RULE_EQ | RULE_8 | RULE_ABS:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                    case RULE_EQ | RULE_8 | RULE_REL:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_EQ | RULE_16 | RULE_ABS:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                    case RULE_EQ | RULE_16 | RULE_REL:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_EQ | RULE_32 | RULE_ABS:
+                        if (group_modules[k].delta != 0) {
+                            if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                            != *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                                goto end;
+                        } else {
+                            if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                < *(uint32_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta)
+                             || (*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                > *(uint32_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                                goto end;
+                        }
+                    case RULE_EQ | RULE_32 | RULE_REL:
+                        if (group_modules[k].delta == 0) {
+                            if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                            != *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                                goto end;
+                        } else {
+                            if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                < *(uint32_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta)
+                             || (*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                > *(uint32_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                                goto end;
+                        }
+                        break;
+                    case RULE_EQ | RULE_64 | RULE_ABS:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                    case RULE_EQ | RULE_64 | RULE_REL:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        != *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_8 | RULE_ABS:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_8 | RULE_REL:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_16 | RULE_ABS:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_16 | RULE_REL:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_32 | RULE_ABS:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_32 | RULE_REL:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_64 | RULE_ABS:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_NE | RULE_64 | RULE_REL:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        == *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_8 | RULE_ABS:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_8 | RULE_REL:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint8_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_16 | RULE_ABS:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_16 | RULE_REL:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint16_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_32 | RULE_ABS:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_32 | RULE_REL:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint32_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_64 | RULE_ABS:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_GT | RULE_64 | RULE_REL:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        <= *(uint64_t *)(**record_iter+group_modules[k].field_offset2)+group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_8 | RULE_ABS:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint8_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_8 | RULE_REL:
+                        if ((*(uint8_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint8_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_16 | RULE_ABS:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint16_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_16 | RULE_REL:
+                        if ((*(uint16_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint16_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_32 | RULE_ABS:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint32_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_32 | RULE_REL:
+                        if ((*(uint32_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint32_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_64 | RULE_ABS:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint64_t *)(**record_iter+group_modules[k].field_offset2)))
+                            goto end;
+                        break;
+                    case RULE_LT | RULE_64 | RULE_REL:
+                        if ((*(uint64_t *)(filtered_records[i]+group_modules[k].field_offset1)
+                                        >= *(uint64_t *)(**record_iter+group_modules[k].field_offset2)-group_modules[k].delta))
+                            goto end;
+                        break;
+                }
+/*                if (!group_modules[k].func(newgroup, group_modules[k].field_offset1,
                             **record_iter, group_modules[k].field_offset2, group_modules[k].delta))
-                    break;
+                    break;*//*
+                if (!rule_matches)
+                    break;*/
             }
+end:
 
             // first rule didnt match
             if (k == 0)
@@ -379,8 +562,8 @@ int main(int argc, char **argv)
     };
 
     struct grouper_rule group_module_branch1[2] = {
-        { data->offsets.srcaddr, data->offsets.srcaddr, 0, grouper_eq_uint32_t },
-        { data->offsets.dstaddr, data->offsets.dstaddr, 0, grouper_eq_uint32_t },
+        { data->offsets.srcaddr, data->offsets.srcaddr, 0, RULE_EQ | RULE_32 | RULE_ABS },
+        { data->offsets.dstaddr, data->offsets.dstaddr, 0, RULE_EQ | RULE_32 | RULE_ABS },
 //        { data->offsets.Last, data->offsets.First, 1, grouper_lt_uint32_t_rel }
     };
 
@@ -409,8 +592,8 @@ int main(int argc, char **argv)
     };
 
     struct grouper_rule group_module_branch2[2] = {
-        { data->offsets.srcaddr, data->offsets.srcaddr, 0, grouper_eq_uint32_t },
-        { data->offsets.dstaddr, data->offsets.dstaddr, 0, grouper_eq_uint32_t },
+        { data->offsets.srcaddr, data->offsets.srcaddr, 0, RULE_EQ | RULE_32 | RULE_ABS },
+        { data->offsets.dstaddr, data->offsets.dstaddr, 0, RULE_EQ | RULE_32 | RULE_ABS },
 //        { data->offsets.Last, data->offsets.First, 1, grouper_lt_uint32_t_rel },
     };
 
