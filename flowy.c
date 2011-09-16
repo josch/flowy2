@@ -11,6 +11,7 @@
 #include "auto_comps.h"
 
 struct group **grouper(char **filtered_records, size_t num_filtered_records, struct grouper_rule *group_modules, int num_group_modules, struct grouper_aggr *aggr, size_t num_group_aggr, size_t *num_groups);
+void assign_fptr(struct branch_info *binfos, int num_threads);
 
 // TODO: allow OR in filters
 // TODO: allow grouping and merging with more than one module
@@ -217,8 +218,8 @@ int main(int argc, char **argv)
     };
 
     struct grouper_rule group_module_branch1[2] = {
-        { data->offsets.srcaddr, data->offsets.srcaddr, 0, grouper_eq_uint32_t },
-        { data->offsets.dstaddr, data->offsets.dstaddr, 0, grouper_eq_uint32_t },
+        { data->offsets.srcaddr, data->offsets.srcaddr, 0, RULE_EQ | RULE_NO | RULE_S2_32 | RULE_S1_32, NULL },
+        { data->offsets.dstaddr, data->offsets.dstaddr, 0, RULE_EQ | RULE_NO | RULE_S2_32 | RULE_S1_32, NULL },
 //        { data->offsets.Last, data->offsets.First, 1, grouper_lt_uint32_t_rel }
     };
 
@@ -247,8 +248,8 @@ int main(int argc, char **argv)
     };
 
     struct grouper_rule group_module_branch2[2] = {
-        { data->offsets.srcaddr, data->offsets.srcaddr, 0, grouper_eq_uint32_t },
-        { data->offsets.dstaddr, data->offsets.dstaddr, 0, grouper_eq_uint32_t },
+        { data->offsets.srcaddr, data->offsets.srcaddr, 0, RULE_EQ | RULE_NO | RULE_S2_32 | RULE_S1_32, NULL },
+        { data->offsets.dstaddr, data->offsets.dstaddr, 0, RULE_EQ | RULE_NO | RULE_S2_32 | RULE_S1_32, NULL },
 //        { data->offsets.Last, data->offsets.First, 1, grouper_lt_uint32_t_rel },
     };
 
@@ -271,6 +272,11 @@ int main(int argc, char **argv)
     binfos[1].num_aggr = 4;
     binfos[1].gfilter_rules = gfilter_branch2;
     binfos[1].num_gfilter_rules = 0;
+
+    /*
+     * fill the func attribute of grouper rules
+     */
+    assign_fptr(binfos, num_threads);
 
     /*
      * SPLITTER
