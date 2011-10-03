@@ -62,7 +62,9 @@ char **filter(struct ft_data *data, struct filter_rule *filter_rules, int num_fi
     return filtered_records;
 }
 
-struct group **group_filter(struct group **groups, size_t num_groups, struct gfilter_rule *rules, size_t num_gfilter_rules, size_t *num_filtered_groups)
+struct group **group_filter(struct group **groups, size_t num_groups,
+        struct gfilter_rule *rules, size_t num_gfilter_rules,
+        size_t *num_filtered_groups)
 {
     int i, j;
     struct group **filtered_groups;
@@ -155,12 +157,12 @@ static void *branch_start(void *arg)
 {
     struct branch_info *binfo = (struct branch_info *)arg;
 
-    struct group **groups;
-    struct group **filtered_groups;
-    char **filtered_records;
+    char **filtered_records; /* temporary - are freed later */
     size_t num_filtered_records;
+    struct group **groups; /* temporary - are freed later */
     size_t num_groups;
-    size_t num_filtered_groups;
+    struct group **filtered_groups; /* returned */
+    size_t num_filtered_groups; /* stored in binfo */
 
     /*
      * FILTER
@@ -185,7 +187,9 @@ static void *branch_start(void *arg)
     free(groups);
     printf("\rnumber of filtered groups: %zd\n", num_filtered_groups);
 
-    pthread_exit(filtered_groups);
+    binfo->num_filtered_groups = num_filtered_groups;
+    binfo->filtered_groups = filtered_groups;
+    pthread_exit(NULL);
 }
 
 int main(int argc, char **argv)
@@ -196,7 +200,8 @@ int main(int argc, char **argv)
     pthread_t *thread_ids;
     pthread_attr_t *thread_attrs;
     struct branch_info *binfos;
-    struct group ***group_collections;
+    struct group ***filtered_groups;
+    size_t *num_filtered_groups;
 //    struct group **group_tuples;
 
     num_threads = 2;
@@ -296,13 +301,18 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    group_collections = (struct group ***)malloc(num_threads*sizeof(struct group **));
-    if (group_collections == NULL) {
+    filtered_groups = (struct group ***)malloc(num_threads*sizeof(struct group **));
+    if (filtered_groups == NULL) {
         perror("malloc");
         exit(EXIT_FAILURE);
     }
 
-    num_threads = 1;
+    num_filtered_groups = (size_t *)malloc(sizeof(size_t)*num_threads);
+    if (num_filtered_groups == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+
     for (i = 0; i < num_threads; i++) {
         ret = pthread_attr_init(&thread_attrs[i]);
         if (ret != 0) {
@@ -327,15 +337,17 @@ int main(int argc, char **argv)
     }
 
     for (i = 0; i < num_threads; i++) {
-        ret = pthread_join(thread_ids[i], (void **)(&group_collections[i]));
+        ret = pthread_join(thread_ids[i], NULL);
         if (ret != 0) {
             errno = ret;
             perror("pthread_join");
             exit(EXIT_FAILURE);
         }
-    }
 
-    exit(EXIT_SUCCESS);
+        num_filtered_groups[i] = binfos[i].num_filtered_groups;
+        filtered_groups[i] = binfos[i].filtered_groups;
+        printf("%zd\n", num_filtered_groups[i]);
+    }
 
     free(thread_ids);
     free(thread_attrs);

@@ -109,6 +109,7 @@ struct flowquery {
  */
 
 struct branch_info {
+    /* have to be filled manually */
     struct ft_data *data;
     struct filter_rule *filter_rules;
     size_t num_filter_rules;
@@ -118,6 +119,9 @@ struct branch_info {
     size_t num_aggr;
     struct gfilter_rule *gfilter_rules;
     size_t num_gfilter_rules;
+    /* will be filled by individual branches */
+    struct group **filtered_groups;
+    size_t num_filtered_groups;
 };
 
 /*
