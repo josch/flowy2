@@ -1,1 +1,6 @@
 *.o
+auto_assign.c
+auto_comps.c
+auto_comps.h
+auto_switch.c
+flowy

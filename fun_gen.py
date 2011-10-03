@@ -415,3 +415,64 @@ source.write("""
 """)
 
 source.close()
+
+def switch_cases(op, atype1, atype2, dtype):
+    result = ""
+    if op == "eq":
+        if dtype == 'no':
+            result += "    rule_matches = (*(%s *)(newgroup->members[0] + group_modules[k].field_offset1) == *(%s *)(**record_iter + group_modules[k].field_offset2));\n"%(atype1, atype2)
+        else:
+            if dtype == 'rel':
+                result += "    rec1_%s = *(%s *)(newgroup->members[newgroup->num_members-1] + group_modules[k].field_offset1);\n"%(atype1, atype1)
+            else:
+                result += "    rec1_%s = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1);\n"%(atype1, atype1)
+            result += "    rec2_%s = *(%s *)(**record_iter + group_modules[k].field_offset2);\n"%(atype2, atype2)
+            result += "    rule_matches = (rec1_%s >= rec2_%s - group_modules[k].delta) && (rec1_%s <= rec2_%s + group_modules[k].delta);\n"%(atype1, atype2, atype1, atype2)
+    elif op == "ne":
+        if dtype == 'no':
+            result += "    rule_matches = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1) != *(%s *)(**record_iter + group_modules[k].field_offset2);\n"%(atype1, atype2)
+        else:
+            if dtype == 'rel':
+                result += "    rec1_%s = *(%s *)(newgroup->members[newgroup->num_members-1] + group_modules[k].field_offset1);\n"%(atype1, atype1)
+            else:
+                result += "    rec1_%s = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1);\n"%(atype1, atype1)
+            result += "    rec2_%s = *(%s *)(**record_iter + group_modules[k].field_offset2);\n"%(atype2, atype2)
+            result += "    rule_matches = (rec1_%s < rec2_%s - group_modules[k].delta) || (rec1_%s > rec2_%s + group_modules[k].delta);\n"%(atype1, atype2, atype1, atype2)
+    elif op in ['lt', 'le']:
+        if dtype == 'no':
+            result += "    rule_matches = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2);\n"%(atype1, operation_map[op], atype2)
+        elif dtype == 'rel':
+            result += "    rule_matches = *(%s *)(newgroup->members[newgroup->num_members-1] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2) + group_modules[k].delta;\n"%(atype1, operation_map[op], atype2)
+        else:
+            result += "    rule_matches = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2) + group_modules[k].delta;\n"%(atype1, operation_map[op], atype2)
+    elif op in ['gt', 'ge']:
+        if dtype == 'no':
+            result += "    rule_matches = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2);\n"%(atype1, operation_map[op], atype2)
+        if dtype == 'rel':
+            result += "    rule_matches = *(%s *)(newgroup->members[newgroup->num_members-1] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2) - group_modules[k].delta;\n"%(atype1, operation_map[op], atype2)
+        else:
+            result += "    rule_matches = *(%s *)(newgroup->members[0] + group_modules[k].field_offset1) %s *(%s *)(**record_iter + group_modules[k].field_offset2) - group_modules[k].delta;\n"%(atype1, operation_map[op], atype2)
+    else:
+        raise ValueError(op)
+    return result;
+
+source = open("auto_switch.c", "w")
+
+source.write(preamble)
+
+source.write("rule_matches = false;\n")
+source.write("switch (group_modules[k].op) {\n")
+
+for op in 'RULE_EQ', 'RULE_NE', 'RULE_GT', 'RULE_LT', 'RULE_LE', 'RULE_GE':
+    for atype1 in 'RULE_S1_8', 'RULE_S1_16', 'RULE_S1_32', 'RULE_S1_64':
+        for atype2 in 'RULE_S2_8', 'RULE_S2_16', 'RULE_S2_32', 'RULE_S2_64':
+            for dtype in 'RULE_ABS', 'RULE_REL', 'RULE_NO':
+                source.write("case %s | %s | %s | %s:\n"%(op, atype1, atype2, dtype))
+                source.write(switch_cases(enum_map[op], enum_map[atype1], enum_map[atype2], enum_map[dtype]))
+                source.write
+                source.write("    break;\n")
+
+source.write("}\n")
+source.write("if (!rule_matches) break;\n")
+
+source.close()
