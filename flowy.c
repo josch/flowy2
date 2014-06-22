@@ -1,3 +1,29 @@
+/*
+ * Copyright 2011 Johannes 'josch' Schauer <j.schauer@email.de>
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -9,9 +35,10 @@
 #include "ftreader.h"
 #include "flowy.h"
 #include "auto_comps.h"
+#include "utils.h"
 
 struct group **grouper(char **filtered_records, size_t num_filtered_records, struct grouper_rule *group_modules, int num_group_modules, struct grouper_aggr *aggr, size_t num_group_aggr, size_t *num_groups);
-void assign_fptr(struct branch_info *binfos, int num_threads);
+struct group ***merger(struct group ***filtered_groups, size_t *num_filtered_groups, int num_threads, struct merger_rule *filter, int num_filter_rules);
 
 // TODO: allow OR in filters
 // TODO: allow grouping and merging with more than one module
@@ -72,6 +99,15 @@ struct group **group_filter(struct group **groups, size_t num_groups,
     *num_filtered_groups = 0;
     filtered_groups = (struct group **)malloc(sizeof(struct group *)**num_filtered_groups);
 
+    printf("foobar3\n");
+    for (i = num_groups-1; i > num_groups-10; i--) {
+        printf("%p\n", groups[i]);
+        if (groups[i] == NULL) {
+            perror("found nil");
+            exit(EXIT_FAILURE);
+        }
+    }
+
     for (i = 0; i < num_groups; i++) {
         for (j = 0; j < num_gfilter_rules; j++) {
             if (!rules[j].func(groups[i], rules[j].field, rules[j].value, rules[j].delta))
@@ -98,60 +134,17 @@ struct group **group_filter(struct group **groups, size_t num_groups,
     }
     filtered_groups[*num_filtered_groups] = groups[i];
 
-    return filtered_groups;
-}
-
-/*
-struct group **merger(struct group ***group_collections, int num_threads, struct merger_rule *filter)
-{
-    struct group **group_tuples;
-    int buffer_size;
-    int num_group_tuples;
-    int i, j;
-
-    buffer_size = 128;
-    group_tuples = (struct group **)malloc(sizeof(struct group *)*num_threads*buffer_size);
-    if (group_tuples == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-
-    num_group_tuples = 0;
-
-    for (i = 0; group_collections[0][i]->aggr != NULL; i++) {
-        for (j = 0; group_collections[1][j]->aggr != NULL; j++) {
-            if (!filter[0].func(group_collections[0][i], filter[0].field1, group_collections[1][j], filter[0].field2, filter[0].delta)
-                    || !filter[1].filter(group_collections[0][i], filter[1].field1, group_collections[1][j], filter[1].field2, filter[1].delta)
-                    )
-                continue;
-
-            if (num_group_tuples == buffer_size) {
-                buffer_size *= 2;
-                group_tuples = (struct group **)realloc(group_tuples, sizeof(struct group *)*num_threads*buffer_size);
-                if (group_tuples == NULL) {
-                    perror("malloc");
-                    exit(EXIT_FAILURE);
-                }
-            }
-
-            group_tuples[num_group_tuples*num_threads + 0] = group_collections[0][i];
-            group_tuples[num_group_tuples*num_threads + 1] = group_collections[1][j];
-            num_group_tuples++;
+    printf("foobar2\n");
+    for (i = *num_filtered_groups-1; i > *num_filtered_groups-10; i--) {
+        printf("%p\n", filtered_groups[i]);
+        if (filtered_groups[i] == NULL) {
+            perror("found nil");
+            exit(EXIT_FAILURE);
         }
     }
 
-    group_tuples = (struct group **)realloc(group_tuples, sizeof(struct group *)*num_threads*(buffer_size + 1));
-    if (group_tuples == NULL) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    group_tuples[num_group_tuples*num_threads + 0] = NULL;
-    group_tuples[num_group_tuples*num_threads + 1] = NULL;
-
-//    printf("number of group tuples: %d\n", num_group_tuples);
-
-    return group_tuples;
-}*/
+    return filtered_groups;
+}
 
 static void *branch_start(void *arg)
 {
@@ -163,6 +156,8 @@ static void *branch_start(void *arg)
     size_t num_groups;
     struct group **filtered_groups; /* returned */
     size_t num_filtered_groups; /* stored in binfo */
+
+    //if (binfo->branch_id == 1) return NULL;
 
     /*
      * FILTER
@@ -179,6 +174,12 @@ static void *branch_start(void *arg)
     free(filtered_records);
     printf("\nnumber of groups: %zd\n", num_groups);
 
+    int i;
+    printf("foobar4\n");
+    for (i = num_groups-1; i > num_groups-10; i--) {
+        printf("%p\n", groups[i]);
+    }
+
     /*
      * GROUPFILTER
      */
@@ -189,6 +190,14 @@ static void *branch_start(void *arg)
 
     binfo->num_filtered_groups = num_filtered_groups;
     binfo->filtered_groups = filtered_groups;
+
+    for (i = 0; i < num_filtered_groups; i++) {
+        if (binfo->filtered_groups[i] == NULL) {
+            perror("found nil");
+            exit(EXIT_FAILURE);
+        }
+    }
+
     pthread_exit(NULL);
 }
 
@@ -202,7 +211,7 @@ int main(int argc, char **argv)
     struct branch_info *binfos;
     struct group ***filtered_groups;
     size_t *num_filtered_groups;
-//    struct group **group_tuples;
+    struct group ***group_tuples;
 
     num_threads = 2;
 
@@ -238,6 +247,7 @@ int main(int argc, char **argv)
     struct gfilter_rule gfilter_branch1[0] = {
     };
 
+    binfos[0].branch_id = 0;
     binfos[0].data = data;
     binfos[0].filter_rules = filter_rules_branch1;
     binfos[0].num_filter_rules = 0;
@@ -268,6 +278,7 @@ int main(int argc, char **argv)
     struct gfilter_rule gfilter_branch2[0] = {
     };
 
+    binfos[1].branch_id = 1;
     binfos[1].data = data;
     binfos[1].filter_rules = filter_rules_branch2;
     binfos[1].num_filter_rules = 1;
@@ -357,12 +368,23 @@ int main(int argc, char **argv)
      * MERGER
      */
 
-/*    struct merger_filter_rule mfilter[3] = {
-        { 0, 0, 1, 1, 0, mfilter_equal },
-        { 0, 2, 1, 2, 0, mfilter_lessthan },
-    };*/
+    struct merger_rule mfilter[2] = {
+        { 0, 0, 1, 1, 0, merger_eq },
+        { 0, 2, 1, 2, 0, merger_lt },
+    };
 
-//    group_tuples = merger(group_collections, num_threads, mfilter);
+    printf("foobar1\n");
+    for (i = num_filtered_groups[0]-1; i > num_filtered_groups[0]-10; i--) {
+        printf("%p\n", filtered_groups[0][i]);
+        if (filtered_groups[0][i] == NULL) {
+            perror("found nil");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    group_tuples = merger(filtered_groups, num_filtered_groups, num_threads, mfilter, 2);
+
+    free(group_tuples);
 
     /*
      * UNGROUPER
